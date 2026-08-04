@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "PriceWalk",
+    "slug": "nestquest",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "nestquest",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "NestQuest uses the camera to overlay house prices on the street in front of you.",
+        "NSLocationWhenInUseUsageDescription": "NestQuest uses your location and heading to find the houses you're looking at.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NestQuest uses your location and heading to find the houses you're looking at."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NestQuest uses the camera to overlay house prices on the street in front of you."
+        }
+      ],
+      "expo-asset"
+    ],
+    "extra": {
+      "router": {}
+    }
+  }
+}

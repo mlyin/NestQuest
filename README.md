@@ -21,19 +21,29 @@ with **no Apple Developer account** via the free **Expo Go** app.
 4. Open the iPhone **Camera** app and scan the QR code shown in your terminal.
    It opens in Expo Go and loads the app. Save a file → it reloads instantly.
 5. Allow **Camera** and **Location** when prompted. Go outside and open the
-   **Explore** tab — you'll see floating price tags. It works with **Demo data**
-   out of the box (no key needed).
+   **Explore** tab — you'll see a floating tag over each house with its price,
+   street address, and beds/baths.
 
 > Your computer and iPhone must be on the **same Wi-Fi**. If they aren't, run
 > `npx expo start --tunnel` instead.
 
-## Getting real data (optional)
+## You need an API key (required)
 
-The app has a live **Demo / RentCast / Zillow** toggle at the top of the Explore
-and Map screens. Demo always works. To enable the others, add keys:
+**Every house shown is real API data.** There is no demo or sample mode — if a
+provider has no key or its request fails, the screen says so rather than filling
+in placeholder houses.
 
 1. Copy `.env.example` to `.env`.
-2. Fill in either or both keys, then restart `npx expo start`.
+2. Fill in at least one key below.
+3. Restart with `npx expo start --clear`. Keys are read at build time, so a
+   server that's already running will not pick up your edits.
+
+The **RentCast / Zillow** toggle at the top of the Explore and Map screens
+switches between them; a provider with no key is greyed out and marked `·no key`.
+
+> ⚠️ Anything prefixed `EXPO_PUBLIC_` is embedded in the JS bundle and readable
+> by anyone who installs the app. Fine for a personal build — don't ship these
+> keys in a public release.
 
 ### RentCast (best for the walk-around — every house, owner, last sale)
 - Sign up: https://app.rentcast.io/app/api  (free tier available)
@@ -68,16 +78,17 @@ src/
   types.ts               Property model
   geo.ts                 distance / bearing / heading math
   useDeviceLocation.ts   GPS + compass heading hook
-  store.ts               app state (zustand): properties, saved, provider
+  store.ts               app state (zustand): properties, saved, provider, error
   services/
-    index.ts             provider dispatcher (demo/rentcast/zillow)
+    index.ts             provider dispatcher (rentcast/zillow)
+    errors.ts            typed provider failures, phrased for the UI
     rentcast.ts          RentCast API
     zillow.ts            Zillow via RapidAPI
-    mock.ts              demo houses generator
   components/
-    PropertyLabel.tsx    the floating AR price tag
+    PropertyLabel.tsx    floating AR tag: price + address + beds/baths
     PropertyDetailSheet.tsx  bottom detail card
-    ProviderToggle.tsx   Demo/RentCast/Zillow switch
+    ProviderToggle.tsx   RentCast/Zillow switch
+    DataStatus.tsx       explains an empty screen (no key / failed / none found)
 ```
 
 ## How the AR works (and its limits)

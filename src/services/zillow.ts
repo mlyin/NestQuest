@@ -1,13 +1,14 @@
 import * as Location from "expo-location";
 import { Coords, Property } from "../types";
 import { formatPrice } from "../geo";
-import { generateMockProperties } from "./mock";
+import { providerError } from "./errors";
 
 // Unofficial Zillow data via RapidAPI (host: zillow-com1). This scrapes Zillow,
 // so it's ToS-gray and can break — fine for a personal build, not a public launch.
 const HOST = "zillow-com1.p.rapidapi.com";
 const API_KEY = process.env.EXPO_PUBLIC_RAPIDAPI_KEY ?? "";
 
+export const ZILLOW_ENV_VAR = "EXPO_PUBLIC_RAPIDAPI_KEY";
 export const hasZillowKey = () => API_KEY.length > 0;
 
 interface ZillowProp {
@@ -47,16 +48,31 @@ function normalize(p: ZillowProp): Property | null {
 /**
  * Zillow for-sale listings near the user. The RapidAPI search takes a place
  * (zip/city), so we reverse-geocode the user's coordinates first.
+ *
+ * Everything returned is a real listing — an empty array means the search had
+ * no for-sale houses in this area, never that we substituted placeholder data.
  */
 export async function fetchZillowNearby(center: Coords): Promise<Property[]> {
-  if (!API_KEY) return generateMockProperties(center);
+  if (!API_KEY) {
+    throw providerError(
+      "missing-key",
+      "Zillow",
+      `Zillow needs a RapidAPI key. Add ${ZILLOW_ENV_VAR} to .env, then restart Expo.`
+    );
+  }
 
   const places = await Location.reverseGeocodeAsync(center);
   const place = places[0];
   const location =
     place?.postalCode ??
     (place?.city && place?.region ? `${place.city}, ${place.region}` : null);
-  if (!location) throw new Error("Could not resolve your area for Zillow.");
+  if (!location) {
+    throw providerError(
+      "geocode-failed",
+      "Zillow",
+      "Could not work out which area you're in, so Zillow can't be searched here."
+    );
+  }
 
   const url =
     `https://${HOST}/propertyExtendedSearch` +
@@ -64,10 +80,21 @@ export async function fetchZillowNearby(center: Coords): Promise<Property[]> {
   const res = await fetch(url, {
     headers: { "X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": HOST },
   });
-  if (!res.ok) throw new Error(`Zillow(RapidAPI) ${res.status}`);
-  const data: { props?: ZillowProp[] } = await res.json();
-  const list = (data.props ?? [])
+
+  if (!res.ok) {
+    throw providerError(
+      "request-failed",
+      "Zillow",
+      res.status === 401 || res.status === 403
+        ? "RapidAPI rejected your key. Check the value in .env and that you're subscribed to zillow-com1."
+        : res.status === 429
+        ? "RapidAPI rate limit reached. Wait a moment, then retry."
+        : `Zillow (RapidAPI) request failed (HTTP ${res.status}).`
+    );
+  }
+
+  const data = (await res.json()) as { props?: ZillowProp[] } | null;
+  return (data?.props ?? [])
     .map(normalize)
     .filter((p): p is Property => p !== null);
-  return list.length ? list : generateMockProperties(center);
 }

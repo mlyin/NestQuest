@@ -1,10 +1,11 @@
 import { Coords, Property } from "../types";
 import { formatPrice } from "../geo";
-import { generateMockProperties } from "./mock";
+import { providerError } from "./errors";
 
 const API_BASE = "https://api.rentcast.io/v1";
 const API_KEY = process.env.EXPO_PUBLIC_RENTCAST_API_KEY ?? "";
 
+export const RENTCAST_ENV_VAR = "EXPO_PUBLIC_RENTCAST_API_KEY";
 export const hasRentCastKey = () => API_KEY.length > 0;
 
 interface RentCastRecord {
@@ -43,18 +44,41 @@ function normalize(r: RentCastRecord, i: number): Property | null {
   };
 }
 
-/** RentCast property records within a radius (miles). Great for the AR walk. */
+/**
+ * RentCast property records within a radius (miles). Great for the AR walk.
+ * Everything returned is a real record — an empty array means the API had
+ * nothing at these coordinates, never that we substituted placeholder data.
+ */
 export async function fetchRentCastNearby(
   center: Coords,
   radiusMiles = 0.2
 ): Promise<Property[]> {
-  if (!API_KEY) return generateMockProperties(center);
+  if (!API_KEY) {
+    throw providerError(
+      "missing-key",
+      "RentCast",
+      `RentCast needs an API key. Add ${RENTCAST_ENV_VAR} to .env, then restart Expo.`
+    );
+  }
+
   const url =
     `${API_BASE}/properties?latitude=${center.latitude}` +
     `&longitude=${center.longitude}&radius=${radiusMiles}&limit=50`;
   const res = await fetch(url, { headers: { "X-Api-Key": API_KEY } });
-  if (!res.ok) throw new Error(`RentCast ${res.status}`);
-  const data: RentCastRecord[] = await res.json();
-  const list = data.map(normalize).filter((p): p is Property => p !== null);
-  return list.length ? list : generateMockProperties(center);
+
+  if (!res.ok) {
+    throw providerError(
+      "request-failed",
+      "RentCast",
+      res.status === 401 || res.status === 403
+        ? "RentCast rejected your API key. Check the value in .env."
+        : res.status === 429
+        ? "RentCast rate limit reached. Wait a moment, then retry."
+        : `RentCast request failed (HTTP ${res.status}).`
+    );
+  }
+
+  const data = (await res.json()) as RentCastRecord[] | null;
+  if (!Array.isArray(data)) return [];
+  return data.map(normalize).filter((p): p is Property => p !== null);
 }

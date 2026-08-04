@@ -43,3 +43,13 @@ export function formatPrice(value: number | null): string {
   if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
   return `$${value}`;
 }
+
+/**
+ * Just the street line of a formatted address, for the narrow AR tag —
+ * "123 Maple St, Austin, TX 78701" becomes "123 Maple St". The full
+ * address still shows in the detail sheet.
+ */
+export function shortAddress(address: string): string {
+  const street = address.split(",")[0].trim();
+  return street.length > 0 ? street : address;
+}

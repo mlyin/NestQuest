@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { Coords, Property } from "./types";
-import { fetchByProvider, ProviderId } from "./services";
+import {
+  defaultProvider,
+  describeError,
+  fetchByProvider,
+  ProviderId,
+} from "./services";
 
 interface AppState {
   properties: Property[];
@@ -9,6 +14,8 @@ interface AppState {
   loading: boolean;
   provider: ProviderId;
   lastFetchCenter: Coords | null;
+  /** Why the last fetch produced nothing, phrased for the user. */
+  error: string | null;
 
   select: (p: Property | null) => void;
   setProvider: (id: ProviderId) => void;
@@ -22,14 +29,17 @@ export const useStore = create<AppState>((set, get) => ({
   saved: [],
   selected: null,
   loading: false,
-  provider: "demo",
+  provider: defaultProvider(),
   lastFetchCenter: null,
+  error: null,
 
   select: (p) => set({ selected: p }),
 
   setProvider: (id) => {
-    set({ provider: id, lastFetchCenter: null });
+    // Capture the centre before clearing it, so switching sources refetches
+    // the spot you're standing on rather than waiting for you to walk 40m.
     const center = get().lastFetchCenter;
+    set({ provider: id, properties: [], error: null, lastFetchCenter: null });
     if (center) get().refresh(center);
   },
 
@@ -45,10 +55,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   refresh: async (center) => {
     if (get().loading) return;
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const properties = await fetchByProvider(get().provider, center);
       set({ properties, lastFetchCenter: center });
+    } catch (e) {
+      // Record the centre even on failure, otherwise every GPS tick retries
+      // a call we already know fails. Switching source or moving 40m retries.
+      set({ properties: [], lastFetchCenter: center, error: describeError(e) });
     } finally {
       set({ loading: false });
     }

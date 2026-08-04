@@ -14,14 +14,17 @@ import { distanceMeters, bearingDegrees, relativeAngle } from "@/geo";
 import PropertyLabel from "@/components/PropertyLabel";
 import PropertyDetailSheet from "@/components/PropertyDetailSheet";
 import ProviderToggle from "@/components/ProviderToggle";
+import DataStatus from "@/components/DataStatus";
 
 const { width, height } = Dimensions.get("window");
 const HFOV = 55; // approx horizontal camera field of view in portrait
 const MAX_DISTANCE = 150; // meters — beyond this we don't draw labels
+const TAG_WIDTH = 180; // keep in sync with styles.floating
 
 export default function ExploreScreen() {
   const [camPerm, requestCam] = useCameraPermissions();
-  const { coords, heading, permission, error } = useDeviceLocation();
+  const { coords, heading, permission, error: locationError } =
+    useDeviceLocation();
   const properties = useStore((s) => s.properties);
   const loading = useStore((s) => s.loading);
   const select = useStore((s) => s.select);
@@ -87,7 +90,7 @@ export default function ExploreScreen() {
           return (
             <View
               key={p.id}
-              style={[styles.floating, { left: x - 70, top: y }]}
+              style={[styles.floating, { left: x - TAG_WIDTH / 2, top: y }]}
             >
               <PropertyLabel
                 property={p}
@@ -111,9 +114,14 @@ export default function ExploreScreen() {
         </View>
       </View>
 
-      {error && (
+      {/* Why the camera view is empty, when it is */}
+      <View style={styles.statusWrap} pointerEvents="box-none">
+        <DataStatus />
+      </View>
+
+      {locationError && (
         <View style={styles.errBox} pointerEvents="none">
-          <Text style={styles.hudSub}>{error}</Text>
+          <Text style={styles.hudSub}>{locationError}</Text>
         </View>
       )}
 
@@ -129,7 +137,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   center: { justifyContent: "center", alignItems: "center", padding: 30, gap: 16 },
-  floating: { position: "absolute", width: 140, alignItems: "center" },
+  floating: { position: "absolute", width: TAG_WIDTH, alignItems: "center" },
   hud: {
     position: "absolute",
     top: 60,
@@ -142,6 +150,12 @@ const styles = StyleSheet.create({
   },
   hudText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   hudSub: { color: "#ffd60a", fontSize: 12, marginTop: 2 },
+  statusWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
   errBox: { position: "absolute", bottom: 40, alignSelf: "center" },
   msg: { color: "#fff", fontSize: 17, textAlign: "center", lineHeight: 24 },
   btn: {

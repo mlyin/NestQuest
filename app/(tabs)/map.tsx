@@ -3,9 +3,10 @@ import { View, StyleSheet, ActivityIndicator, Text } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useDeviceLocation } from "@/useDeviceLocation";
 import { useStore } from "@/store";
-import { distanceMeters } from "@/geo";
+import { distanceMeters, shortAddress } from "@/geo";
 import PropertyDetailSheet from "@/components/PropertyDetailSheet";
 import ProviderToggle from "@/components/ProviderToggle";
+import DataStatus from "@/components/DataStatus";
 
 export default function MapScreen() {
   const { coords } = useDeviceLocation();
@@ -49,7 +50,7 @@ export default function MapScreen() {
           <Marker
             key={p.id}
             coordinate={{ latitude: p.latitude, longitude: p.longitude }}
-            title={p.priceLabel}
+            title={`${p.priceLabel} · ${shortAddress(p.address)}`}
             description={`${p.bedrooms ?? "?"} bd · ${p.bathrooms ?? "?"} ba`}
             onPress={() => select(p)}
           />
@@ -58,6 +59,11 @@ export default function MapScreen() {
 
       <View style={styles.toggle}>
         <ProviderToggle />
+      </View>
+
+      {/* Why the map has no pins, when it doesn't */}
+      <View style={styles.statusWrap} pointerEvents="box-none">
+        <DataStatus />
       </View>
 
       <PropertyDetailSheet />
@@ -70,4 +76,10 @@ const styles = StyleSheet.create({
   center: { justifyContent: "center", alignItems: "center", gap: 12 },
   msg: { color: "#aeaeb2", fontSize: 15 },
   toggle: { position: "absolute", top: 60, alignSelf: "center" },
+  statusWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
 });

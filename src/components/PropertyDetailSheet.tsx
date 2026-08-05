@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Modal,
   View,
@@ -6,35 +6,55 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useStore } from "../store";
 import { formatPrice } from "../geo";
+import { configuredEstimateSources, Estimate } from "../services";
+import { Property } from "../types";
 
 /** Bottom card shown when a house is selected on the map or in AR. */
 export default function PropertyDetailSheet() {
   const selected = useStore((s) => s.selected);
+  if (!selected) return null;
+  // Split so the hooks below always run while a house is open — they can't
+  // live above an early return.
+  return <Sheet property={selected} />;
+}
+
+function Sheet({ property }: { property: Property }) {
   const select = useStore((s) => s.select);
   const toggleSave = useStore((s) => s.toggleSave);
   const isSaved = useStore((s) => s.isSaved);
+  const estimates = useStore((s) => s.estimates);
+  const estimatesLoading = useStore((s) => s.estimatesLoading);
+  const loadEstimates = useStore((s) => s.loadEstimates);
 
-  if (!selected) return null;
-  const saved = isSaved(selected.id);
+  // Value estimates are billed per house, so they're fetched on open only.
+  useEffect(() => {
+    loadEstimates(property);
+  }, [property.id, loadEstimates]);
 
-  const rows: [string, string][] = [
-    ["Beds", selected.bedrooms?.toString() ?? "—"],
-    ["Baths", selected.bathrooms?.toString() ?? "—"],
+  const saved = isSaved(property.id);
+  const sources = configuredEstimateSources();
+
+  const details: [string, string][] = [
+    ["Beds", property.bedrooms?.toString() ?? "—"],
+    ["Baths", property.bathrooms?.toString() ?? "—"],
     [
       "Size",
-      selected.squareFootage ? `${selected.squareFootage.toLocaleString()} sqft` : "—",
+      property.squareFootage
+        ? `${property.squareFootage.toLocaleString()} sqft`
+        : "—",
     ],
-    ["Built", selected.yearBuilt?.toString() ?? "—"],
-    ["Type", selected.propertyType ?? "—"],
+    ["Built", property.yearBuilt?.toString() ?? "—"],
+    ["Type", property.propertyType ?? "—"],
     [
       "Last sale",
-      selected.lastSalePrice
-        ? `${formatPrice(selected.lastSalePrice)}${
-            selected.lastSaleDate ? ` · ${selected.lastSaleDate.slice(0, 4)}` : ""
+      property.lastSalePrice
+        ? `${formatPrice(property.lastSalePrice)}${
+            property.lastSaleDate ? ` · ${property.lastSaleDate.slice(0, 4)}` : ""
           }`
         : "—",
     ],
@@ -50,12 +70,13 @@ export default function PropertyDetailSheet() {
       <Pressable style={styles.backdrop} onPress={() => select(null)} />
       <View style={styles.sheet}>
         <View style={styles.grabber} />
+
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.price}>{selected.priceLabel}</Text>
-            <Text style={styles.address}>{selected.address}</Text>
+            <Text style={styles.price}>{property.priceLabel}</Text>
+            <Text style={styles.address}>{property.address}</Text>
           </View>
-          <Pressable onPress={() => toggleSave(selected)} hitSlop={12}>
+          <Pressable onPress={() => toggleSave(property)} hitSlop={12}>
             <Ionicons
               name={saved ? "heart" : "heart-outline"}
               size={30}
@@ -65,33 +86,90 @@ export default function PropertyDetailSheet() {
         </View>
 
         <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.stats}
-          contentContainerStyle={{ gap: 10, paddingRight: 20 }}
+          style={styles.scroll}
+          contentContainerStyle={{ paddingBottom: 8 }}
+          showsVerticalScrollIndicator={false}
         >
-          {rows.map(([label, value]) => (
-            <View key={label} style={styles.stat}>
-              <Text style={styles.statValue}>{value}</Text>
-              <Text style={styles.statLabel}>{label}</Text>
-            </View>
-          ))}
-        </ScrollView>
+          <Text style={styles.sectionLabel}>Current market value</Text>
+          <View style={styles.group}>
+            {sources.length === 0 ? (
+              <Text style={styles.empty}>
+                No estimate source configured. Add a key to .env.
+              </Text>
+            ) : estimatesLoading && estimates.length === 0 ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#8e8e93" />
+                <Text style={styles.empty}>
+                  Asking {sources.join(" and ")}…
+                </Text>
+              </View>
+            ) : (
+              estimates.map((e, i) => (
+                <EstimateRow key={e.source} estimate={e} first={i === 0} />
+              ))
+            )}
+          </View>
 
-        <View style={styles.ownerBox}>
-          <Text style={styles.ownerLabel}>Owner (public record)</Text>
-          <Text style={styles.ownerValue}>
-            {selected.ownerNames.length
-              ? selected.ownerNames.join(", ")
-              : "Not available"}
-          </Text>
-        </View>
+          <Text style={styles.sectionLabel}>Details</Text>
+          <View style={styles.group}>
+            {details.map(([label, value], i) => (
+              <View key={label} style={[styles.row, i > 0 && styles.divider]}>
+                <Text style={styles.rowLabel}>{label}</Text>
+                <Text style={styles.rowValue}>{value}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.sectionLabel}>Owner (public record)</Text>
+          <View style={styles.group}>
+            <View style={styles.row}>
+              <Text style={styles.rowValue}>
+                {property.ownerNames.length
+                  ? property.ownerNames.join(", ")
+                  : "Not available"}
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
 
         <Pressable style={styles.closeBtn} onPress={() => select(null)}>
           <Text style={styles.closeText}>Close</Text>
         </Pressable>
       </View>
     </Modal>
+  );
+}
+
+function EstimateRow({
+  estimate,
+  first,
+}: {
+  estimate: Estimate;
+  first: boolean;
+}) {
+  const range =
+    estimate.low != null && estimate.high != null
+      ? `${formatPrice(estimate.low)} – ${formatPrice(estimate.high)}`
+      : null;
+
+  return (
+    <View style={[styles.row, !first && styles.divider]}>
+      <Text style={styles.rowLabel}>{estimate.source}</Text>
+      <View style={{ flex: 1, alignItems: "flex-end" }}>
+        {estimate.error ? (
+          <Text style={styles.rowError} numberOfLines={2}>
+            {estimate.error}
+          </Text>
+        ) : estimate.value != null ? (
+          <>
+            <Text style={styles.rowEstimate}>{formatPrice(estimate.value)}</Text>
+            {range && <Text style={styles.rowRange}>{range}</Text>}
+          </>
+        ) : (
+          <Text style={styles.rowValue}>No estimate</Text>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -104,6 +182,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 34,
     paddingTop: 10,
+    maxHeight: "82%",
   },
   grabber: {
     alignSelf: "center",
@@ -116,25 +195,42 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   price: { color: "#fff", fontSize: 26, fontWeight: "700" },
   address: { color: "#aeaeb2", fontSize: 15, marginTop: 2 },
-  stats: { marginTop: 18 },
-  stat: {
+  scroll: { marginTop: 18 },
+  sectionLabel: {
+    color: "#8e8e93",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 7,
+    marginTop: 4,
+  },
+  group: {
     backgroundColor: "#2c2c2e",
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    marginBottom: 18,
+  },
+  row: {
+    flexDirection: "row",
     alignItems: "center",
-    minWidth: 74,
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    gap: 16,
   },
-  statValue: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  statLabel: { color: "#8e8e93", fontSize: 12, marginTop: 3 },
-  ownerBox: {
-    marginTop: 18,
-    backgroundColor: "#2c2c2e",
-    borderRadius: 12,
-    padding: 14,
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#48484a" },
+  rowLabel: { color: "#8e8e93", fontSize: 15 },
+  rowValue: { color: "#fff", fontSize: 16, fontWeight: "500", flexShrink: 1 },
+  rowEstimate: { color: "#30d158", fontSize: 18, fontWeight: "700" },
+  rowRange: { color: "#8e8e93", fontSize: 12, marginTop: 1 },
+  rowError: { color: "#ff9f0a", fontSize: 13, textAlign: "right" },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
   },
-  ownerLabel: { color: "#8e8e93", fontSize: 12 },
-  ownerValue: { color: "#fff", fontSize: 16, fontWeight: "500", marginTop: 4 },
-  closeBtn: { marginTop: 20, alignItems: "center", paddingVertical: 12 },
+  empty: { color: "#8e8e93", fontSize: 14, flexShrink: 1 },
+  closeBtn: { marginTop: 8, alignItems: "center", paddingVertical: 12 },
   closeText: { color: "#0a84ff", fontSize: 17, fontWeight: "600" },
 });

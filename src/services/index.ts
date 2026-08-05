@@ -6,9 +6,10 @@ import {
 } from "./rentcast";
 
 /**
- * The single source of house data. RentCast is the only provider that returns
- * owner names and last-sale records for arbitrary coordinates, which is what
- * the AR walk needs — see README for the alternatives that were considered.
+ * The source of house *discovery*. RentCast is the only API that takes raw
+ * coordinates and returns owner names and last-sale records, which is what the
+ * AR walk needs. Current-value estimates are a separate concern — see
+ * services/estimates.ts, which fans out across RentCast and Zillow.
  */
 export const DATA_SOURCE = {
   label: "RentCast",
@@ -28,3 +29,5 @@ export async function fetchNearby(center: Coords): Promise<Property[]> {
 
 export { describeError, isProviderError } from "./errors";
 export type { ProviderError, ProviderErrorCode } from "./errors";
+export { fetchEstimates, configuredEstimateSources } from "./estimates";
+export type { Estimate } from "./estimates";

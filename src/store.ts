@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { Coords, Property } from "./types";
-import { describeError, fetchNearby } from "./services";
+import { describeError, Estimate, fetchEstimates, fetchNearby } from "./services";
 
 interface AppState {
   properties: Property[];
@@ -11,10 +11,15 @@ interface AppState {
   /** Why the last fetch produced nothing, phrased for the user. */
   error: string | null;
 
+  /** Current-value estimates for `selected`, one row per configured source. */
+  estimates: Estimate[];
+  estimatesLoading: boolean;
+
   select: (p: Property | null) => void;
   toggleSave: (p: Property) => void;
   isSaved: (id: string) => boolean;
   refresh: (center: Coords) => Promise<void>;
+  loadEstimates: (p: Property) => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -24,8 +29,12 @@ export const useStore = create<AppState>((set, get) => ({
   loading: false,
   lastFetchCenter: null,
   error: null,
+  estimates: [],
+  estimatesLoading: false,
 
-  select: (p) => set({ selected: p }),
+  // Clearing estimates on select stops a previously-tapped house's numbers
+  // from flashing up under the next one's address.
+  select: (p) => set({ selected: p, estimates: [] }),
 
   toggleSave: (p) =>
     set((s) => {
@@ -45,10 +54,22 @@ export const useStore = create<AppState>((set, get) => ({
       set({ properties, lastFetchCenter: center });
     } catch (e) {
       // Record the centre even on failure, otherwise every GPS tick retries
-      // a call we already know fails. Retry is manual, or after moving 40m.
+      // a call we already know fails. Retry is manual, or after moving on.
       set({ properties: [], lastFetchCenter: center, error: describeError(e) });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  loadEstimates: async (p) => {
+    if (get().estimatesLoading) return;
+    set({ estimatesLoading: true });
+    try {
+      const estimates = await fetchEstimates(p);
+      // Ignore results that arrived after you tapped a different house.
+      if (get().selected?.id === p.id) set({ estimates });
+    } finally {
+      set({ estimatesLoading: false });
     }
   },
 }));

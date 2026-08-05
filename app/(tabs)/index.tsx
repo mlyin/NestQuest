@@ -11,14 +11,12 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useDeviceLocation } from "@/useDeviceLocation";
 import { useStore } from "@/store";
 import { distanceMeters, bearingDegrees, relativeAngle } from "@/geo";
-import { MOVE_THRESHOLD_M } from "@/config";
+import { MOVE_THRESHOLD_M, MAX_DISTANCE_M, HFOV_DEG } from "@/config";
 import PropertyLabel from "@/components/PropertyLabel";
 import PropertyDetailSheet from "@/components/PropertyDetailSheet";
 import DataStatus from "@/components/DataStatus";
 
 const { width, height } = Dimensions.get("window");
-const HFOV = 55; // approx horizontal camera field of view in portrait
-const MAX_DISTANCE = 150; // meters — beyond this we don't draw labels
 const TAG_WIDTH = 180; // keep in sync with styles.floating
 
 export default function ExploreScreen() {
@@ -71,45 +69,79 @@ export default function ExploreScreen() {
 
   const h = heading ?? 0;
 
+  // Work out where every house sits relative to you, then split into the two
+  // filters that decide whether it gets drawn. Keeping the counts lets the HUD
+  // explain an empty screen instead of leaving you guessing.
+  const placed = coords
+    ? properties.map((p) => ({
+        p,
+        dist: distanceMeters(coords, p),
+        rel: relativeAngle(h, bearingDegrees(coords, p)),
+      }))
+    : [];
+  const inRange = placed.filter((t) => t.dist <= MAX_DISTANCE_M);
+  const visible = inRange.filter((t) => Math.abs(t.rel) <= HFOV_DEG / 2);
+  const tooFar = placed.length - inRange.length;
+  const outOfFrame = inRange.length - visible.length;
+
   return (
     <View style={styles.container}>
       <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
       {/* Floating price tags */}
-      {coords &&
-        properties.map((p) => {
-          const dist = distanceMeters(coords, p);
-          if (dist > MAX_DISTANCE) return null;
-          const bearing = bearingDegrees(coords, p);
-          const rel = relativeAngle(h, bearing);
-          if (Math.abs(rel) > HFOV / 2) return null; // out of view
+      {visible.map(({ p, dist, rel }) => {
+        const x = width / 2 + (rel / (HFOV_DEG / 2)) * (width / 2);
+        const y = height * 0.38 + (dist / MAX_DISTANCE_M) * height * 0.18;
+        const scale = 1.1 - (dist / MAX_DISTANCE_M) * 0.5;
 
-          const x = width / 2 + (rel / (HFOV / 2)) * (width / 2);
-          const y = height * 0.38 + (dist / MAX_DISTANCE) * height * 0.18;
-          const scale = 1.1 - (dist / MAX_DISTANCE) * 0.5;
-
-          return (
-            <View
-              key={p.id}
-              style={[styles.floating, { left: x - TAG_WIDTH / 2, top: y }]}
-            >
-              <PropertyLabel
-                property={p}
-                distance={dist}
-                scale={scale}
-                onPress={() => select(p)}
-              />
-            </View>
-          );
-        })}
+        return (
+          <View
+            key={p.id}
+            style={[styles.floating, { left: x - TAG_WIDTH / 2, top: y }]}
+          >
+            <PropertyLabel
+              property={p}
+              distance={dist}
+              scale={scale}
+              onPress={() => select(p)}
+            />
+          </View>
+        );
+      })}
 
       {/* HUD */}
       <View style={styles.hud}>
         <Text style={styles.hudText}>
           {loading
             ? "Finding houses…"
-            : `${properties.length} nearby · heading ${Math.round(h)}°`}
+            : `${visible.length} in view · ${properties.length} nearby · ${Math.round(h)}°`}
         </Text>
+
+        {heading == null && (
+          <Text style={styles.hudWarn}>
+            No compass reading — tags assume you face north
+          </Text>
+        )}
+        {!loading && visible.length === 0 && outOfFrame > 0 && (
+          <Text style={styles.hudWarn}>
+            Turn around — {outOfFrame} house{outOfFrame === 1 ? "" : "s"} out of frame
+          </Text>
+        )}
+        {!loading && tooFar > 0 && (
+          <Text style={styles.hudSub}>
+            {tooFar} beyond {MAX_DISTANCE_M}m
+          </Text>
+        )}
+
+        <Pressable
+          style={styles.refreshBtn}
+          disabled={!coords || loading}
+          onPress={() => coords && refresh(coords)}
+        >
+          <Text style={styles.refreshText}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </Text>
+        </Pressable>
       </View>
 
       {/* Why the camera view is empty, when it is */}
@@ -140,14 +172,24 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 60,
     alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
     alignItems: "center",
+    maxWidth: width - 40,
   },
   hudText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  hudSub: { color: "#ffd60a", fontSize: 12, marginTop: 2 },
+  hudWarn: { color: "#ffd60a", fontSize: 12, marginTop: 3, textAlign: "center" },
+  hudSub: { color: "#aeaeb2", fontSize: 12, marginTop: 3, textAlign: "center" },
+  refreshBtn: {
+    marginTop: 8,
+    backgroundColor: "#0a84ff",
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 11,
+  },
+  refreshText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   statusWrap: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",

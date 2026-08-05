@@ -82,3 +82,58 @@ export async function fetchRentCastNearby(
   if (!Array.isArray(data)) return [];
   return data.map(normalize).filter((p): p is Property => p !== null);
 }
+
+interface RentCastValueResponse {
+  price?: number | null;
+  priceRangeLow?: number | null;
+  priceRangeHigh?: number | null;
+}
+
+export interface ValueEstimate {
+  value: number | null;
+  low: number | null;
+  high: number | null;
+}
+
+/**
+ * RentCast's current value estimate (AVM) for one address.
+ *
+ * This is a SEPARATE billed request per house, which is why it runs only when
+ * you tap a property rather than for every house on screen — 50 houses would
+ * be the entire free monthly quota in one refresh.
+ */
+export async function fetchRentCastValue(
+  address: string
+): Promise<ValueEstimate> {
+  if (!API_KEY) {
+    throw providerError(
+      "missing-key",
+      "RentCast",
+      `Add ${RENTCAST_ENV_VAR} to .env for value estimates.`
+    );
+  }
+
+  const url = `${API_BASE}/avm/value?address=${encodeURIComponent(address)}`;
+  const res = await fetch(url, { headers: { "X-Api-Key": API_KEY } });
+
+  if (!res.ok) {
+    throw providerError(
+      "request-failed",
+      "RentCast",
+      res.status === 401 || res.status === 403
+        ? "RentCast rejected your API key."
+        : res.status === 404
+        ? "RentCast has no value estimate for this address."
+        : res.status === 429
+        ? "RentCast rate limit reached."
+        : `RentCast value request failed (HTTP ${res.status}).`
+    );
+  }
+
+  const data = (await res.json()) as RentCastValueResponse | null;
+  return {
+    value: typeof data?.price === "number" ? data.price : null,
+    low: typeof data?.priceRangeLow === "number" ? data.priceRangeLow : null,
+    high: typeof data?.priceRangeHigh === "number" ? data.priceRangeHigh : null,
+  };
+}

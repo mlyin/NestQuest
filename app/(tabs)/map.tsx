@@ -4,8 +4,8 @@ import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useDeviceLocation } from "@/useDeviceLocation";
 import { useStore } from "@/store";
 import { distanceMeters, shortAddress } from "@/geo";
+import { MOVE_THRESHOLD_M } from "@/config";
 import PropertyDetailSheet from "@/components/PropertyDetailSheet";
-import ProviderToggle from "@/components/ProviderToggle";
 import DataStatus from "@/components/DataStatus";
 
 export default function MapScreen() {
@@ -18,7 +18,7 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (!coords || refetching.current) return;
-    if (!lastCenter || distanceMeters(coords, lastCenter) > 40) {
+    if (!lastCenter || distanceMeters(coords, lastCenter) > MOVE_THRESHOLD_M) {
       refetching.current = true;
       refresh(coords).finally(() => (refetching.current = false));
     }
@@ -57,10 +57,6 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      <View style={styles.toggle}>
-        <ProviderToggle />
-      </View>
-
       {/* Why the map has no pins, when it doesn't */}
       <View style={styles.statusWrap} pointerEvents="box-none">
         <DataStatus />
@@ -75,7 +71,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   center: { justifyContent: "center", alignItems: "center", gap: 12 },
   msg: { color: "#aeaeb2", fontSize: 15 },
-  toggle: { position: "absolute", top: 60, alignSelf: "center" },
   statusWrap: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",

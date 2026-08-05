@@ -27,43 +27,63 @@ with **no Apple Developer account** via the free **Expo Go** app.
 > Your computer and iPhone must be on the **same Wi-Fi**. If they aren't, run
 > `npx expo start --tunnel` instead.
 
-## You need an API key (required)
+## You need a RentCast API key (required)
 
-**Every house shown is real API data.** There is no demo or sample mode — if a
-provider has no key or its request fails, the screen says so rather than filling
-in placeholder houses.
+**Every house shown is real API data.** There is no demo or sample mode — if the
+key is missing or a request fails, the screen says so rather than filling in
+placeholder houses.
 
-1. Copy `.env.example` to `.env`.
-2. Fill in at least one key below.
-3. Restart with `npx expo start --clear`. Keys are read at build time, so a
+1. Sign up at https://www.rentcast.io/api
+2. Create a key in the dashboard: https://app.rentcast.io/app/api
+3. Copy `.env.example` to `.env` and paste it in:
+   ```
+   EXPO_PUBLIC_RENTCAST_API_KEY=your_key_here
+   ```
+4. Restart with `npx expo start --clear`. Keys are read at build time, so a
    server that's already running will not pick up your edits.
 
-The **RentCast / Zillow** toggle at the top of the Explore and Map screens
-switches between them; a provider with no key is greyed out and marked `·no key`.
+RentCast returns property records within a radius: beds, baths, sqft, year
+built, last sale price/date, and **owner names** from public county records.
 
 > ⚠️ Anything prefixed `EXPO_PUBLIC_` is embedded in the JS bundle and readable
-> by anyone who installs the app. Fine for a personal build — don't ship these
-> keys in a public release.
+> by anyone who installs the app. Fine for a personal build — don't ship this
+> key in a public release.
 
-### RentCast (best for the walk-around — every house, owner, last sale)
-- Sign up: https://app.rentcast.io/app/api  (free tier available)
-- Copy your key into `.env`:
-  ```
-  EXPO_PUBLIC_RENTCAST_API_KEY=your_key_here
-  ```
-- Returns property records within a radius: beds, baths, sqft, year built,
-  last sale price/date, and **owner names** (public record).
+### Watch your request quota
 
-### Zillow (unofficial, via RapidAPI — for-sale listings)
-- Subscribe to the "Zillow.com" API by ApiMaker on RapidAPI:
-  https://rapidapi.com/apimaker/api/zillow-com1
-- Copy your RapidAPI key into `.env`:
-  ```
-  EXPO_PUBLIC_RAPIDAPI_KEY=your_rapidapi_key_here
-  ```
-- ⚠️ This is a **third-party scraper of Zillow**, not an official API. It's
-  ToS-gray and can break without notice. Fine for a personal build; do **not**
-  ship it publicly. Returns for-sale listings (price, beds, baths); no owner data.
+The free **Developer** plan includes **50 requests/month**, and the app refetches
+every time you move `MOVE_THRESHOLD_M` metres (`src/config.ts`, default 40).
+That's about **2 km of walking per month**. Paid tiers start at $74/mo for
+1,000 requests.
+
+To stretch the free tier, raise `MOVE_THRESHOLD_M`. The search radius is already
+0.2 miles (~320m), so refetching every 40m mostly re-requests the same houses:
+
+| `MOVE_THRESHOLD_M` | Walking distance per 50 requests |
+| --- | --- |
+| 40m | 2 km |
+| 150m | 7.5 km |
+| 250m | 12.5 km |
+
+### Why RentCast, and not Zillow
+
+**Zillow and Redfin have no public property API.** The earlier build used an
+unofficial Zillow scraper on RapidAPI, which returned for-sale listings only —
+no owner names, no year built, no last-sale history — and was ToS-gray besides.
+It has been removed.
+
+Alternatives worth knowing about if you outgrow RentCast:
+
+| Provider | Owner data | Notes |
+| --- | --- | --- |
+| **RentCast** | Yes | ~140M properties, coordinate search, free tier. What this app uses. |
+| **ATTOM** | Yes | ~158M properties, 9,000 fields. Free trial, then enterprise contracts. |
+| **Estated** | Yes | Deeds, tax, ownership history. Migrating onto ATTOM's infrastructure. |
+| **Regrid** | Yes | Parcel *polygons* + ownership. The upgrade path for pinning exact houses. |
+| **RealEstateAPI** | Yes | Aggregated public records, developer-focused. |
+
+Regrid is the interesting one long-term — parcel boundaries are what you'd need
+to fix the "adjacent house mislabeled" problem described below.
 
 ## Project layout
 
@@ -76,18 +96,17 @@ app/                     screens (expo-router, file-based)
   (tabs)/saved.tsx       saved houses
 src/
   types.ts               Property model
+  config.ts              MOVE_THRESHOLD_M — how often we spend an API request
   geo.ts                 distance / bearing / heading math
   useDeviceLocation.ts   GPS + compass heading hook
-  store.ts               app state (zustand): properties, saved, provider, error
+  store.ts               app state (zustand): properties, saved, error
   services/
-    index.ts             provider dispatcher (rentcast/zillow)
-    errors.ts            typed provider failures, phrased for the UI
+    index.ts             the data source (RentCast) + re-exports
+    errors.ts            typed failures, phrased for the UI
     rentcast.ts          RentCast API
-    zillow.ts            Zillow via RapidAPI
   components/
     PropertyLabel.tsx    floating AR tag: price + address + beds/baths
     PropertyDetailSheet.tsx  bottom detail card
-    ProviderToggle.tsx   RentCast/Zillow switch
     DataStatus.tsx       explains an empty screen (no key / failed / none found)
 ```
 

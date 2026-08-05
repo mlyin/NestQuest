@@ -5,10 +5,7 @@
  * `instanceof` on subclassed builtins is unreliable once the bundle is
  * transpiled for Hermes, and the UI only ever needs to switch on the code.
  */
-export type ProviderErrorCode =
-  | "missing-key"
-  | "request-failed"
-  | "geocode-failed";
+export type ProviderErrorCode = "missing-key" | "request-failed";
 
 export interface ProviderError extends Error {
   code: ProviderErrorCode;

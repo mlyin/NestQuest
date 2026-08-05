@@ -11,9 +11,9 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useDeviceLocation } from "@/useDeviceLocation";
 import { useStore } from "@/store";
 import { distanceMeters, bearingDegrees, relativeAngle } from "@/geo";
+import { MOVE_THRESHOLD_M } from "@/config";
 import PropertyLabel from "@/components/PropertyLabel";
 import PropertyDetailSheet from "@/components/PropertyDetailSheet";
-import ProviderToggle from "@/components/ProviderToggle";
 import DataStatus from "@/components/DataStatus";
 
 const { width, height } = Dimensions.get("window");
@@ -32,11 +32,12 @@ export default function ExploreScreen() {
   const lastCenter = useStore((s) => s.lastFetchCenter);
   const refetching = useRef(false);
 
-  // Fetch houses when we first get a location, or after moving ~40m.
+  // Fetch houses when we first get a location, or after moving far enough
+  // to be worth another API request (MOVE_THRESHOLD_M — see src/config.ts).
   useEffect(() => {
     if (!coords || refetching.current) return;
     const moved =
-      !lastCenter || distanceMeters(coords, lastCenter) > 40;
+      !lastCenter || distanceMeters(coords, lastCenter) > MOVE_THRESHOLD_M;
     if (moved) {
       refetching.current = true;
       refresh(coords).finally(() => {
@@ -109,9 +110,6 @@ export default function ExploreScreen() {
             ? "Finding houses…"
             : `${properties.length} nearby · heading ${Math.round(h)}°`}
         </Text>
-        <View style={{ marginTop: 8 }}>
-          <ProviderToggle />
-        </View>
       </View>
 
       {/* Why the camera view is empty, when it is */}

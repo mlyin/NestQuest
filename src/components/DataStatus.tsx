@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useStore } from "../store";
-import { providerMeta } from "../services";
+import { DATA_SOURCE } from "../services";
 
 /**
  * Explains an empty screen — missing API key, failed request, or genuinely no
@@ -14,22 +14,20 @@ export default function DataStatus() {
   const loading = useStore((s) => s.loading);
   const error = useStore((s) => s.error);
   const count = useStore((s) => s.properties.length);
-  const provider = useStore((s) => s.provider);
   const center = useStore((s) => s.lastFetchCenter);
   const refresh = useStore((s) => s.refresh);
 
   if (loading || count > 0) return null;
 
-  const meta = providerMeta(provider);
-  const needsKey = !meta.hasKey();
+  const needsKey = !DATA_SOURCE.hasKey();
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>
-        {needsKey ? `${meta.label} isn't set up yet` : "No houses here"}
+        {needsKey ? `${DATA_SOURCE.label} isn't set up yet` : "No houses here"}
       </Text>
       <Text style={styles.body}>
-        {error ?? `${meta.label} returned no houses around this spot.`}
+        {error ?? `${DATA_SOURCE.label} returned no houses around this spot.`}
       </Text>
       {needsKey ? (
         <Text style={styles.hint}>
